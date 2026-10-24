@@ -16,9 +16,9 @@ CommandBindings 注册命令 1000，ApplicationHost 发出命令，分发器找�
 
 ## 工程
 
-使用 Qt 5 的 Qt Creator 打开 Framework.pro，同时构建主程序、DemoPlugin 和 ContentPlugin，并选择 LearnFramework 作为运行目标。主程序输出到 bin，插件自动输出到 bin/plugins，无需手动复制 DLL。主程序和插件须使用同一个 Kit、相同 Debug/Release 配置。
+使用 Qt 5 的 Qt Creator 打开 Framework.pro，同时构建主程序、DemoPlugin、ContentPlugin、DevicePlugin 和 ReportPlugin，并选择 LearnFramework 作为运行目标。主程序输出到 bin，插件自动输出到 bin/plugins，无需手动复制 DLL。主程序和插件须使用同一个 Kit、相同 Debug/Release 配置。
 
-Learn.pro 仍可单独构建主程序；examples/DemoPlugin/DemoPlugin.pro、examples/ContentPlugin/ContentPlugin.pro 可分别单独构建插件。插件源码放在 examples 下，生成的动态库放在可执行文件旁的 plugins 目录。插件不是独立可执行程序，构建后应运行 LearnFramework。
+Learn.pro 仍可单独构建主程序，各插件的 .pro 也可独立构建。默认六分区 UI 需要 ContentPlugin、DevicePlugin、ReportPlugin 三个 DLL；单独构建主程序时请另外构建或部署它们。插件源码放在 examples 下，生成的动态库放在可执行文件旁的 plugins 目录。插件不是独立可执行程序，构建后应运行 LearnFramework。
 
 命令 1000 表示“扫描目录并加载插件”，不是 DemoPlugin 的专属编号。调用链为 ApplicationHost::show → CommandBus::dispatchCommand(1000) → PluginLoader → DemoPlugin::initialize。初始化创建窗口和按钮；退出主程序时 shutdown 删除窗口。插件不访问 ServiceRegistry，也不链接主程序，适合作为第一个动态插件示例。
 
@@ -28,7 +28,7 @@ Learn.pro 仍可单独构建主程序；examples/DemoPlugin/DemoPlugin.pro、exa
 
 ## 外部 UI（修改后重启生效）
 
-ApplicationHost 使用 RuntimeUiLoader（继承 QUiLoader）在启动时读取可执行文件旁的 `ui/main.ui`，通过 `std::unique_ptr<QWidget>` 管理窗口，不再声明 `QMainWindow window`。窗口类型、标题、尺寸及布局由 UI 文件决定；默认 UI 包含左右两个内容容器。
+ApplicationHost 使用 RuntimeUiLoader（继承 QUiLoader）在启动时读取可执行文件旁的 `ui/main.ui`，通过 `std::unique_ptr<QWidget>` 管理窗口，不再声明 `QMainWindow window`。窗口类型、标题、尺寸及布局由 UI 文件决定；默认 UI 使用 2 行 × 3 列六个内容容器，每列由一个独立 DLL 提供上下两个界面。
 
 首次修改 C++ 后需要重新构建一次（Learn.pro 已增加 `QT += uitools`，请重新运行 qmake）。构建会把源码 `ui/main.ui` 复制到 `bin/ui/main.ui`。之后用 Qt Designer 打开并保存 **`bin/ui/main.ui`**，关闭并重新启动 `bin/LearnFramework.exe` 即可看到变化，不需要编译，也不需要从 Qt Creator 启动。
 
@@ -42,14 +42,27 @@ ApplicationHost 使用 RuntimeUiLoader（继承 QUiLoader）在启动时读取�
 
 `WidgetContainer` 对应通用外壳 b；`CWidget`、`DWidget`、`EWidget` 是三个独立的 QWidget 子类，分别演示计数、文本输入和列表。WidgetFactory 注册配置名 `c`、`d`、`e`，每次加载都创建独立实例，因此两个容器都选 `c` 时计数也互不影响。
 
-默认 `main.ui` 的 `leftContainer` 配置 `contentClass=c`，`rightContainer` 配置 `contentClass=e`。用 Designer 打开 **运行目录的 `ui/main.ui`**，选择某个容器，在属性编辑器中把动态字符串属性 `contentClass` 改成 `c`、`d` 或 `e`，保存并重启程序即可切换，不需要编译。
+默认 `main.ui` 的六个区域如下：
+
+| 位置 | 容器 objectName | contentClass | 提供者 |
+| --- | --- | --- | --- |
+| 左上：内容计数 | contentCounterContainer | plugin.f | ContentPlugin.dll |
+| 左下：内容文本 | contentTextContainer | plugin.g | ContentPlugin.dll |
+| 中上：设备监控 | deviceMonitorContainer | device.monitor | DevicePlugin.dll |
+| 中下：设备设置 | deviceSettingsContainer | device.settings | DevicePlugin.dll |
+| 右上：报表预览 | reportViewerContainer | report.viewer | ReportPlugin.dll |
+| 右下：报表编辑 | reportEditorContainer | report.editor | ReportPlugin.dll |
+
+用 Designer 打开 **运行目录的 `ui/main.ui`**，选择某个容器，在属性编辑器中修改动态字符串属性 `contentClass`，保存并重启程序即可切换，不需要编译。六个位置都可以选择任意已注册名称，包括内置的 `c`、`d`、`e`。
+
+DevicePlugin 内部的监控与设置共享设备名称、刷新间隔和模拟连接状态。点击设置面板的“应用配置”，监控面板立即同步；设备连接只做模拟，刷新间隔是配置演示，不启动硬件通信或定时采集。ReportPlugin 内部的编辑器与预览共享报表文本，点击“更新预览”生效。设备配置和报表内容仅在本次运行内保存；两个业务插件不依赖彼此，也不链接主程序。
 
 在 Designer 中新增容器：拖入 QWidget，右键“提升为”，提升类名填 `WidgetContainer`，头文件填 `WidgetContainer.h`，添加并提升。然后在属性编辑器中点击“+”，添加 QString 类型的动态属性 `contentClass`。Designer 中容器显示为占位区域，实际内容在程序运行时创建；容器内部布局由代码管理，不要在其中手动添加子控件或布局。
 
 UI 中的配置形式如下（`stdset="0"` 表示动态属性）：
 
 ```xml
-<widget class="WidgetContainer" name="leftContainer">
+<widget class="WidgetContainer" name="contentCounterContainer">
  <property name="contentClass" stdset="0">
   <string>d</string>
  </property>
@@ -61,7 +74,7 @@ UI 中的配置形式如下（`stdset="0"` 表示动态属性）：
 运行时也可以在持有主窗口的代码中切换：
 
 ```cpp
-auto *container = window->findChild<WidgetContainer *>("leftContainer");
+auto *container = window->findChild<WidgetContainer *>("contentCounterContainer");
 QString error;
 if (container && !container->setContentClass("d", &error))
     qWarning().noquote() << error;
@@ -98,11 +111,11 @@ class MyPlugin : public QObject, public Plugin, public WidgetProvider
 
 `widgetClasses()` 返回该插件提供的配置名称；`createWidget` 按名称返回一个新的 QWidget 子类实例，传入 parent，失败返回 nullptr。插件只依赖这两个公共接口与 Qt，不链接主程序，也不调用 ServiceRegistry 或 WidgetFactory。插件自身的资源在 initialize 中准备，在 shutdown 中释放。
 
-完整示例在 `examples/ContentPlugin`。它独立编译出 `ContentPlugin.dll`，提供 `plugin.f`（计数面板）与 `plugin.g`（文本面板）。主程序源码没有包含 FWidget/GWidget 的实现，也没有硬编码注册这两个名称。
+完整示例分别在 `examples/ContentPlugin`、`examples/DevicePlugin`、`examples/ReportPlugin`。它们独立编译为三个 DLL，各提供两个 QWidget 子类。主程序没有包含这些业务类的实现，也没有硬编码注册它们的名称。
 
-1. 首次使用此机制时构建一次更新后的主程序。默认 `main.ui` 仍使用内置 `c/e`，没有插件也能显示。
-2. 用相同 Qt、编译器、位数和 Debug/Release 配置，单独打开 `examples/ContentPlugin/ContentPlugin.pro` 并构建。默认输出到 `bin/plugins`。
-3. 把程序旁 `ui/main.ui` 的 `contentClass` 改为 `plugin.f` 或 `plugin.g`，保存并重新启动程序。
+1. 首次使用此机制时构建一次更新后的主程序。使用 Framework.pro 可同时构建默认六分区 UI 所需的全部插件。
+2. 用相同 Qt、编译器、位数和 Debug/Release 配置，单独打开各插件的 .pro 也能独立构建。默认输出到 `bin/plugins`。
+3. 在程序旁 `ui/main.ui` 中选择已注册的 contentClass，保存并重新启动程序。
 4. 新增业务类时只修改并编译插件 DLL，再更新 UI 配置。无需重新编译或重新链接主程序。
 
 一个 DLL 可以提供任意多个内容类；同一名称可以装入多个容器，各自创建独立实例。推荐使用 `厂商或插件名.界面名` 形式，避免与其他插件或内置类型重名。所有名称先验证再注册，空名称、插件内部重名或与已有类型重名都会拒绝整个插件，保留已有注册。重复扫描同一个成功加载的 DLL 不会重复初始化。
@@ -113,7 +126,7 @@ class MyPlugin : public QObject, public Plugin, public WidgetProvider
 
 本机制在启动时发现 DLL；不支持程序运行中热替换 DLL。部署新插件时应先关闭程序，再替换 DLL 并重启。首次增加插件机制需要更新主程序；后续插件遵守 `Plugin/1.0`、`WidgetProvider/1.0` 接口即可独立扩展，接口或工具链变更时需重建兼容插件。
 
-验证：构建 ContentPlugin 后，构建 `tests/WidgetPluginSmokeTests.pro`，将同配置的 ContentPlugin.dll 复制到测试输出目录 `plugin-test-bin/plugins`，运行测试。测试覆盖实际 ApplicationHost 加载 DLL 内容、业务交互、插件/内置内容切换、工厂副本生命周期、销毁顺序、重复扫描及名称冲突不产生部分注册。
+验证：构建三个内容插件后，构建 `tests/WidgetPluginSmokeTests.pro`，将同配置的 ContentPlugin.dll、DevicePlugin.dll、ReportPlugin.dll 复制到测试输出目录 `plugin-test-bin/plugins`，运行测试。测试覆盖实际 ApplicationHost 加载 DLL 内容、业务交互、插件/内置内容切换、工厂副本生命周期、销毁顺序、重复扫描及名称冲突不产生部分注册；还会读取真实的源码 main.ui，验证六面板同时加载、设备配置同步、报表编辑预览同步、窗口缩放和退出清理，生成 six-panels-preview.png 供检查。
 
 ## 接口约定
 
