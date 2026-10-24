@@ -162,12 +162,22 @@ bool PluginLoader::registerWidgetTypes(const std::shared_ptr<LoadedPlugin> &modu
     if (!validateWidgetTypes(names, module->loader.fileName()))
         return false;
 
-    // 此处仅登记延迟创建回调，main.ui 选中该名称时才会调用 createWidget。
     for (const QString &name : names)
-        factory->registerWidget(name, [module, name](QWidget *parent) {
-            // 捕获共享指针，保证工厂副本使用期间模块仍然有效。
-            return module->createWidget(name, parent);
-        });
+    {
+        // 第一步：声明一个变量，用来保存“接收 parent、返回 QWidget*”的函数。
+        WidgetFactory::Creator creator;
+
+        // 第二步：为变量赋予具体的创建方法。这里保存方法，不会立即创建窗口。
+        // module 按值复制共享指针，让模块保持有效；name 按值保存本次循环的名称。
+        creator = [module, name](QWidget *parent) -> QWidget * {
+            // 以后工厂调用 creator(parent) 时才执行此处，parent 由容器传入。
+            QWidget *widget = module->createWidget(name, parent);
+            return widget;
+        };
+
+        // 第三步：登记“名称 → 创建方法”，以后可按 name 查找并调用该方法。
+        factory->registerWidget(name, creator);
+    }
     return true;
 }
 
