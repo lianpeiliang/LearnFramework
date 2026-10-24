@@ -11,7 +11,10 @@ class WidgetFactory
 {
 public:
     using Creator = std::function<QWidget *(QWidget *parent)>;
-    void registerWidget(const QString &name, Creator creator);
+    // 不允许空名称、空构造函数和同名覆盖。
+    bool registerWidget(const QString &name, Creator creator);
+    bool contains(const QString &name) const;
+    void clear();
     QWidget *create(const QString &name, QWidget *parent) const;
 
 private:

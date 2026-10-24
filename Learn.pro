@@ -39,3 +39,4 @@ SOURCES += src/foundation/Plugin.cpp
 HEADERS += src/foundation/ServiceRegistry.h
 HEADERS += src/foundation/CommandBus.h
 HEADERS += src/foundation/Plugin.h
+HEADERS += src/foundation/WidgetProvider.h

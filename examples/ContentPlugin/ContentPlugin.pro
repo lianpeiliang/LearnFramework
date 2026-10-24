@@ -1,0 +1,8 @@
+QT += core widgets
+CONFIG += c++11 plugin
+TEMPLATE = lib
+TARGET = ContentPlugin
+isEmpty(DESTDIR): DESTDIR = $$PWD/../../bin/plugins
+INCLUDEPATH += $$PWD/../../src/foundation
+HEADERS += ContentPlugin.h ../../src/foundation/Plugin.h ../../src/foundation/WidgetProvider.h
+SOURCES += ContentPlugin.cpp ../../src/foundation/Plugin.cpp

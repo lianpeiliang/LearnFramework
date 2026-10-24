@@ -1,64 +1,120 @@
 #include "PluginLoader.h"
 #include "Plugin.h"
+#include "WidgetFactory.h"
+#include "WidgetProvider.h"
 
 #include <QDebug>
 #include <QDir>
+#include <QFileInfo>
 #include <QLibrary>
 #include <QPluginLoader>
+#include <QPointer>
+#include <QWidget>
+
+struct LoadedPlugin
+{
+    explicit LoadedPlugin(const QString &path) : loader(path) {}
+
+    ~LoadedPlugin()
+    {
+        // 工厂副本都释放后才会到这里；残留内容也必须先于 shutdown 释放。
+        for (int i = widgets.size() - 1; i >= 0; --i)
+            delete widgets.at(i).data();
+        if (initializationAttempted)
+            plugin->shutdown();
+        // 保留 Qt 默认 PreventUnloadHint，不承诺运行中物理卸载 DLL。
+        loader.unload();
+    }
+
+    QPluginLoader loader;
+    Plugin *plugin = nullptr;
+    WidgetProvider *provider = nullptr;
+    bool initializationAttempted = false;
+    QList<QPointer<QWidget>> widgets;
+};
+
+PluginLoader::PluginLoader(WidgetFactory *factory) : factory(factory) {}
 
 PluginLoader::~PluginLoader()
 {
-    // 插件初始化可能有先后依赖，因此按逆序释放插件自己的资源。
-    // 必须先 shutdown，再删除加载器；shutdown 执行时仍需要库中的代码。
-    for (int i = plugins.size() - 1; i >= 0; --i)
-        plugins.at(i)->shutdown();
-
-    // 删除加载器对象；动态库是否实际卸载还受 Qt 的加载提示与其他引用影响。
-    qDeleteAll(loaders);
+    // 工厂回调中的共享引用可继续保持插件有效，避免复制工厂后留下悬空指针。
+    while (!modules.isEmpty())
+        modules.takeLast().reset();
 }
 
 bool PluginLoader::dispatchCommand(unsigned int id, char *data, int length)
 {
-    // 拒绝不支持的命令和无效载荷，避免把任意字节当成路径。
     if (id != 1000 || !data || length <= 0)
         return false;
 
     QDir directory(QString::fromUtf8(data, length));
     bool success = true;
-
-    // 仅扫描这一层目录；目录不存在或没有插件时，当前实现返回 true。
-    for (const QString &name : directory.entryList(QDir::Files))
+    for (const QString &name : directory.entryList(QDir::Files, QDir::Name))
     {
-        QString path = directory.absoluteFilePath(name);
-        // 由 Qt 按平台识别库文件名，兼容 Windows DLL 和其他平台的库后缀。
+        const QString path = directory.absoluteFilePath(name);
         if (!QLibrary::isLibrary(path))
             continue;
+        const QString canonicalPath = QFileInfo(path).canonicalFilePath();
+        if (loadedPaths.contains(canonicalPath))
+            continue;
 
-        QPluginLoader *loader = new QPluginLoader(path);
-        // instance 创建/获取 Qt 插件对象，qobject_cast 检查是否实现约定的 Plugin 接口。
-        Plugin *plugin = qobject_cast<Plugin *>(loader->instance());
-        if (!plugin)
+        auto module = std::make_shared<LoadedPlugin>(path);
+        QObject *instance = module->loader.instance();
+        module->plugin = qobject_cast<Plugin *>(instance);
+        if (!module->plugin)
         {
-            qWarning() << path << loader->errorString();
-            delete loader;
+            qWarning() << "Cannot load Plugin:" << path << module->loader.errorString();
+            success = false;
+            continue;
+        }
+        module->initializationAttempted = true;
+        if (!module->plugin->initialize())
+        {
+            qWarning() << "Plugin initialization failed:" << path;
             success = false;
             continue;
         }
 
-        // 初始化失败也调用 shutdown，以回收插件可能已分配的部分资源。
-        if (!plugin->initialize())
+        module->provider = qobject_cast<WidgetProvider *>(instance);
+        const QStringList names = module->provider && factory
+                                      ? module->provider->widgetClasses() : QStringList();
+        QSet<QString> seen;
+        bool valid = true;
+        for (const QString &key : names)
         {
-            plugin->shutdown();
-            delete loader;
+            if (key.trimmed().isEmpty() || seen.contains(key) || factory->contains(key))
+            {
+                qWarning() << "Conflicting or empty widget class:" << key << "in" << path;
+                valid = false;
+                break;
+            }
+            seen.insert(key);
+        }
+        if (!valid)
+        {
+            // 整个插件不注册，避免部分注册成功的状态。
             success = false;
             continue;
         }
 
-        // 只记录初始化成功的插件；本阶段不调用 start/stop。
-        loaders.append(loader);
-        plugins.append(plugin);
+        for (const QString &key : names)
+        {
+            factory->registerWidget(key, [module, key](QWidget *parent) -> QWidget * {
+                QWidget *widget = module->provider->createWidget(key, parent);
+                if (widget)
+                {
+                    if (widget->parentWidget() != parent)
+                        widget->setParent(parent);
+                    for (int i = module->widgets.size() - 1; i >= 0; --i)
+                        if (module->widgets.at(i).isNull())
+                            module->widgets.removeAt(i);
+                    module->widgets.append(widget);
+                }
+                return widget;
+            });
+        }
+        modules.append(module);
+        loadedPaths.insert(canonicalPath);
     }
-
-    // 任意一个候选库加载失败都会返回 false，但不回滚已成功初始化的插件。
     return success;
 }
