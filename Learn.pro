@@ -17,6 +17,7 @@ build_pass|!debug_and_release {
 }
 INCLUDEPATH += $$PWD/src/foundation
 INCLUDEPATH += $$PWD/src/runtime
+include(src/widgets/widgets.pri)
 
 # 程序入口与核心调度
 SOURCES += src/runtime/main.cpp

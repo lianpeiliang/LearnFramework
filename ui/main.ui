@@ -13,7 +13,31 @@
   <property name="windowTitle">
    <string>Framework Learning</string>
   </property>
+  <layout class="QHBoxLayout" name="mainLayout" stretch="1,1">
+   <item>
+    <widget class="WidgetContainer" name="leftContainer">
+     <property name="contentClass" stdset="0">
+      <string>c</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="WidgetContainer" name="rightContainer">
+     <property name="contentClass" stdset="0">
+      <string>e</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>WidgetContainer</class>
+   <extends>QWidget</extends>
+   <header>WidgetContainer.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

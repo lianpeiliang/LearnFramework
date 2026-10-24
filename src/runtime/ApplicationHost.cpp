@@ -1,12 +1,18 @@
 #include "ApplicationHost.h"
 #include "ServiceRegistry.h"
+#include "DemoWidgets.h"
+#include "RuntimeUiLoader.h"
 
 #include <QCoreApplication>
 #include <QDir>
 #include <QDebug>
 #include <QFile>
 #include <QFileInfo>
-#include <QUiLoader>
+
+ApplicationHost::ApplicationHost()
+{
+    registerDemoWidgets(widgetFactory);
+}
 
 ApplicationHost *ApplicationHost::instance()
 {
@@ -31,13 +37,21 @@ bool ApplicationHost::show()
         return false;
     }
 
-    QUiLoader loader;
+    RuntimeUiLoader loader(widgetFactory);
     // UI 中的相对图片路径以 UI 所在目录为基准。
     loader.setWorkingDirectory(QFileInfo(file).absoluteDir());
     window.reset(loader.load(&file));
     if (!window)
     {
         qCritical().noquote() << "Cannot load UI:" << uiPath << loader.errorString();
+        return false;
+    }
+
+    QString error;
+    if (!loader.populateContainers(window.get(), &error))
+    {
+        qCritical().noquote() << "Cannot populate UI:" << uiPath << error;
+        window.reset();
         return false;
     }
 

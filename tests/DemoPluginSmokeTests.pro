@@ -5,6 +5,7 @@ TEMPLATE = app
 TARGET = DemoPluginSmokeTests
 DESTDIR = $$PWD/../bin
 INCLUDEPATH += $$PWD/../src/foundation $$PWD/../src/runtime
+include(../src/widgets/widgets.pri)
 
 SOURCES += DemoPluginSmokeTests.cpp \
     ../src/runtime/ApplicationHost.cpp \

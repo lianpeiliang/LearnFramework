@@ -1,6 +1,6 @@
 # 纯框架学习版
 
-仅保留 Qt 启动、空主窗口、命令/消息分发、插件接口与加载、通用窗口和共享对象注册。
+保留 Qt 启动、外部 UI 加载、可配置窗口容器、命令/消息分发、插件接口与加载、通用窗口和共享对象注册。
 
 已移除登录、通信服务、共享业务数据、设备协议、业务 ID、业务配置，以及站位、菜单和登录布局。原项目没有修改。
 
@@ -28,7 +28,7 @@ Learn.pro 仍可单独构建主程序；examples/DemoPlugin/DemoPlugin.pro 可�
 
 ## 外部 UI（修改后重启生效）
 
-ApplicationHost 使用 QUiLoader 在启动时读取可执行文件旁的 `ui/main.ui`，通过 `std::unique_ptr<QWidget>` 管理窗口，不再声明 `QMainWindow window`。窗口类型、标题、尺寸及布局由 UI 文件决定；默认 UI 保留空窗口。
+ApplicationHost 使用 RuntimeUiLoader（继承 QUiLoader）在启动时读取可执行文件旁的 `ui/main.ui`，通过 `std::unique_ptr<QWidget>` 管理窗口，不再声明 `QMainWindow window`。窗口类型、标题、尺寸及布局由 UI 文件决定；默认 UI 包含左右两个内容容器。
 
 首次修改 C++ 后需要重新构建一次（Learn.pro 已增加 `QT += uitools`，请重新运行 qmake）。构建会把源码 `ui/main.ui` 复制到 `bin/ui/main.ui`。之后用 Qt Designer 打开并保存 **`bin/ui/main.ui`**，关闭并重新启动 `bin/LearnFramework.exe` 即可看到变化，不需要编译，也不需要从 Qt Creator 启动。
 
@@ -37,6 +37,49 @@ ApplicationHost 使用 QUiLoader 在启动时读取可执行文件旁的 `ui/mai
 控件事件仍由 C++ 连接，可在加载后使用 `window->findChild<QPushButton *>("按钮的objectName")` 获取控件。修改界面不需要编译；新增业务逻辑或自定义控件仍需代码支持。此方案在重新启动时读取文件，不会自动刷新已经打开的窗口。
 
 验证工程 `tests/ApplicationHostUiTests.pro` 使用独立测试目录，检查 UI 修改后重新加载、控件文字、不同工作目录、窗口释放及缺失/损坏文件；可使用 `-platform offscreen` 运行。实现使用 Qt 官方的 [QUiLoader](https://doc.qt.io/archives/qt-5.15/quiloader.html)。
+
+## 可配置 QWidget 容器
+
+`WidgetContainer` 对应通用外壳 b；`CWidget`、`DWidget`、`EWidget` 是三个独立的 QWidget 子类，分别演示计数、文本输入和列表。WidgetFactory 注册配置名 `c`、`d`、`e`，每次加载都创建独立实例，因此两个容器都选 `c` 时计数也互不影响。
+
+默认 `main.ui` 的 `leftContainer` 配置 `contentClass=c`，`rightContainer` 配置 `contentClass=e`。用 Designer 打开 **运行目录的 `ui/main.ui`**，选择某个容器，在属性编辑器中把动态字符串属性 `contentClass` 改成 `c`、`d` 或 `e`，保存并重启程序即可切换，不需要编译。
+
+在 Designer 中新增容器：拖入 QWidget，右键“提升为”，提升类名填 `WidgetContainer`，头文件填 `WidgetContainer.h`，添加并提升。然后在属性编辑器中点击“+”，添加 QString 类型的动态属性 `contentClass`。Designer 中容器显示为占位区域，实际内容在程序运行时创建；容器内部布局由代码管理，不要在其中手动添加子控件或布局。
+
+UI 中的配置形式如下（`stdset="0"` 表示动态属性）：
+
+```xml
+<widget class="WidgetContainer" name="leftContainer">
+ <property name="contentClass" stdset="0">
+  <string>d</string>
+ </property>
+</widget>
+```
+
+`RuntimeUiLoader::createWidget` 识别容器类，完整加载 UI 后再根据 `contentClass` 填充内容。未设置或为空时保留空容器；未知类名会记录具体容器和配置名并终止启动，已创建的窗口会释放。容器使用零边距布局让内容填满，父子关系保证退出时释放内容。
+
+运行时也可以在持有主窗口的代码中切换：
+
+```cpp
+auto *container = window->findChild<WidgetContainer *>("leftContainer");
+QString error;
+if (container && !container->setContentClass("d", &error))
+    qWarning().noquote() << error;
+```
+
+替换成功会释放旧内容；创建失败时保留旧内容，重复设置相同类型不会重建。调用 `setContentClass("")` 可清空容器。运行时调用不会自动保存回 UI 文件；仅调用 QObject::setProperty 修改属性也不会自动切换，应使用 setContentClass。
+
+添加新的内容类时，先实现 QWidget 子类，再在 `registerDemoWidgets`（或自己的注册函数）中注册构造函数：
+
+```cpp
+factory.registerWidget("myPanel", [](QWidget *parent) {
+    return new MyPanel(parent);
+});
+```
+
+新增 C++ 类需要编译一次；之后在 UI 中选择已注册类不需要编译。这些内容类目前编译在主程序中；现有 DemoPlugin 仍单独演示插件加载，不参与此工厂注册。
+
+相关实现位于 `src/widgets`；`ApplicationHostUiTests` 另外验证左右容器配置、同类实例独立、重启切换、替换/清空及失败时保留原窗口。
 
 ## 接口约定
 
