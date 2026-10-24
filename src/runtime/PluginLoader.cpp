@@ -1,5 +1,7 @@
 #include "PluginLoader.h"
 #include "Plugin.h"
+#include "PluginMessaging.h"
+#include "ServiceRegistry.h"
 #include "WidgetFactory.h"
 #include "WidgetProvider.h"
 
@@ -22,6 +24,10 @@ struct LoadedPlugin
             delete widgets.at(i).data();
         if (initializationAttempted)
             plugin->shutdown();
+        if (servicesAware)
+            servicesAware->setPluginServices(nullptr);
+        // std::function 可能包含 DLL 内的析构代码，必须在卸载前移除全部回调。
+        services.reset();
         // 保留 Qt 默认 PreventUnloadHint，不承诺运行中物理卸载 DLL。
         loader.unload();
     }
@@ -29,11 +35,14 @@ struct LoadedPlugin
     QPluginLoader loader;
     Plugin *plugin = nullptr;
     WidgetProvider *provider = nullptr;
+    PluginServicesAware *servicesAware = nullptr;
+    std::unique_ptr<PluginServicesScope> services;
     bool initializationAttempted = false;
     QList<QPointer<QWidget>> widgets;
 };
 
-PluginLoader::PluginLoader(WidgetFactory *factory) : factory(factory) {}
+PluginLoader::PluginLoader(WidgetFactory *factory)
+    : factory(factory), messaging(std::make_shared<PluginMessageHub>(ServiceRegistry::instance()->commandBus())) {}
 
 PluginLoader::~PluginLoader()
 {
@@ -66,6 +75,12 @@ bool PluginLoader::dispatchCommand(unsigned int id, char *data, int length)
             qWarning() << "Cannot load Plugin:" << path << module->loader.errorString();
             success = false;
             continue;
+        }
+        module->servicesAware = qobject_cast<PluginServicesAware *>(instance);
+        if (module->servicesAware)
+        {
+            module->services.reset(new PluginServicesScope(messaging));
+            module->servicesAware->setPluginServices(module->services.get());
         }
         module->initializationAttempted = true;
         if (!module->plugin->initialize())

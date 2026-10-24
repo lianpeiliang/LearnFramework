@@ -8,6 +8,7 @@
 #include <memory>
 
 class WidgetFactory;
+class PluginMessageHub;
 struct LoadedPlugin;
 
 // 把“加载插件”命令转为 Qt 动态库加载操作，不处理业务数据。
@@ -27,6 +28,7 @@ public:
 
 private:
     WidgetFactory *factory;
+    std::shared_ptr<PluginMessageHub> messaging;
     QList<std::shared_ptr<LoadedPlugin>> modules;
     QSet<QString> loadedPaths;
 };

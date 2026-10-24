@@ -1,5 +1,10 @@
 #include "ApplicationHost.h"
 #include "PluginLoader.h"
+#include "PluginMessaging.h"
+#include "DeviceProtocol.h"
+#include "Plugin.h"
+#include "WidgetProvider.h"
+#include "ServiceRegistry.h"
 #include "WidgetContainer.h"
 #include "WidgetFactory.h"
 
@@ -248,6 +253,178 @@ private slots:
         for (const QPointer<QWidget> &content : contents)
             QVERIFY(content.isNull());
         QVERIFY(QApplication::topLevelWidgets().isEmpty());
+    }
+
+    void communicatesBetweenContentAndDevicePlugins()
+    {
+        ApplicationHost host;
+        QVERIFY(host.show());
+        QWidget *root = nullptr;
+        for (QWidget *widget : QApplication::topLevelWidgets())
+            if (widget->objectName() == "applicationWindow")
+                root = widget;
+        QVERIFY(root);
+        auto *connectDevice = root->findChild<QPushButton *>("contentConnectDeviceButton");
+        auto *disconnectDevice = root->findChild<QPushButton *>("contentDisconnectDeviceButton");
+        auto *commandResult = root->findChild<QLabel *>("contentCommandResult");
+        auto *firstStatus = root->findChild<QLabel *>("contentDeviceStatus");
+        auto *secondStatus = root->findChild<QLabel *>("contentTextDeviceStatus");
+        auto *deviceToggle = root->findChild<QPushButton *>("deviceConnectionButton");
+        auto *deviceStatus = root->findChild<QLabel *>("deviceStatusLabel");
+        QVERIFY(connectDevice && disconnectDevice && commandResult && firstStatus && secondStatus);
+        QVERIFY(deviceToggle && deviceStatus);
+        QVERIFY(!firstStatus->property("connected").toBool());
+        QVERIFY(!secondStatus->property("connected").toBool());
+        const int firstCount = firstStatus->property("receivedEvents").toInt();
+        const int secondCount = secondStatus->property("receivedEvents").toInt();
+        QTest::mouseClick(connectDevice, Qt::LeftButton);
+        QVERIFY(deviceStatus->text().contains(QStringLiteral("已连接")));
+        QVERIFY(firstStatus->property("connected").toBool());
+        QVERIFY(secondStatus->property("connected").toBool());
+        QCOMPARE(firstStatus->property("receivedEvents").toInt(), firstCount + 1);
+        QCOMPARE(secondStatus->property("receivedEvents").toInt(), secondCount + 1);
+        QVERIFY(commandResult->text().contains(QStringLiteral("已由 DevicePlugin 处理")));
+
+        // 设备面板主动改变状态，两名订阅者也会收到事件，不依赖命令发送方。
+        QTest::mouseClick(deviceToggle, Qt::LeftButton);
+        QVERIFY(!firstStatus->property("connected").toBool());
+        QVERIFY(!secondStatus->property("connected").toBool());
+        auto *nameInput = root->findChild<QLineEdit *>("deviceNameInput");
+        auto *apply = root->findChild<QPushButton *>("deviceApplyButton");
+        QVERIFY(nameInput && apply);
+        nameInput->setText(QStringLiteral("跨插件演示设备"));
+        QTest::mouseClick(apply, Qt::LeftButton);
+        QCOMPARE(firstStatus->property("deviceName").toString(), QStringLiteral("跨插件演示设备"));
+        QCOMPARE(secondStatus->property("deviceName").toString(), QStringLiteral("跨插件演示设备"));
+
+        // 动态装入、移除一个订阅面板，后续消息不能调用已销毁窗口的回调。
+        auto *temporaryContainer = root->findChild<WidgetContainer *>("reportEditorContainer");
+        QVERIFY(temporaryContainer);
+        QVERIFY(temporaryContainer->setContentClass("plugin.g"));
+        QPointer<QWidget> temporary = temporaryContainer->contentWidget();
+        QVERIFY(temporaryContainer->setContentClass("report.editor"));
+        QVERIFY(temporary.isNull());
+        QTest::mouseClick(connectDevice, Qt::LeftButton);
+        QVERIFY(firstStatus->property("connected").toBool());
+        QTest::mouseClick(disconnectDevice, Qt::LeftButton);
+        QVERIFY(!firstStatus->property("connected").toBool());
+        QVERIFY(!secondStatus->property("connected").toBool());
+        QTest::mouseClick(connectDevice, Qt::LeftButton);
+        QApplication::processEvents();
+        QVERIFY(root->grab().save(QCoreApplication::applicationDirPath() + "/plugin-communication-preview.png"));
+    }
+
+    void servicesCleanUpCommandsAndSubscriptions()
+    {
+        CommandBus bus;
+        auto hub = std::make_shared<PluginMessageHub>(&bus);
+        PluginServicesScope receiver(hub);
+        PluginServicesScope sender(hub);
+        std::unique_ptr<QObject> commandOwner(new QObject);
+        int commands = 0;
+        QVERIFY(receiver.registerCommand(9000, commandOwner.get(), [&](const QVariantMap &data) {
+            if (data.value("value").type() != QVariant::Int)
+                return false;
+            ++commands;
+            return receiver.publish(9001, data);
+        }));
+        QVERIFY(!sender.registerCommand(9000, commandOwner.get(), [](const QVariantMap &) { return true; }));
+        QVERIFY(!sender.registerCommand(1000, commandOwner.get(), [](const QVariantMap &) { return true; }));
+        QObject subscriber;
+        int messages = 0;
+        QVERIFY(sender.subscribe(9001, &subscriber, [&](const QVariantMap &data) {
+            QCOMPARE(data.value("value").toInt(), 42);
+            ++messages;
+        }));
+        QVERIFY(!sender.sendCommand(9999));
+        QVERIFY(!sender.sendCommand(1000));
+        QVERIFY(!sender.sendCommand(9000));
+        QVERIFY(!bus.dispatchCommand(9000, nullptr, 0));
+        QVariantMap data;
+        data.insert("value", 42);
+        QVERIFY(sender.sendCommand(9000, data));
+        QCOMPARE(commands, 1);
+        QCOMPARE(messages, 1);
+        sender.clear();
+        QVERIFY(receiver.publish(9001, data));
+        QCOMPARE(messages, 1);
+        commandOwner.reset();
+        QVERIFY(!bus.handlerFor(9000));
+        QVERIFY(!sender.sendCommand(9000, data));
+
+        // 分发过程中删除后面的订阅者，Qt 会跳过其失效连接。
+        QObject first;
+        std::unique_ptr<QObject> second(new QObject);
+        int secondMessages = 0;
+        QVERIFY(receiver.subscribe(9002, &first, [&](const QVariantMap &) { second.reset(); }));
+        QVERIFY(receiver.subscribe(9002, second.get(), [&](const QVariantMap &) { ++secondMessages; }));
+        QVERIFY(receiver.publish(9002, {}));
+        QCOMPARE(secondMessages, 0);
+
+        std::unique_ptr<QObject> selfRemovingOwner(new QObject);
+        QVERIFY(receiver.registerCommand(9003, selfRemovingOwner.get(), [&](const QVariantMap &) {
+            selfRemovingOwner.reset();
+            return true;
+        }));
+        QVERIFY(sender.sendCommand(9003));
+        QVERIFY(!bus.handlerFor(9003));
+    }
+
+    void contentPanelShowsUnavailableDeviceService()
+    {
+        CommandBus isolatedBus;
+        auto hub = std::make_shared<PluginMessageHub>(&isolatedBus);
+        PluginServicesScope services(hub);
+        QPluginLoader library(QString::fromUtf8(pluginPath()) + "/ContentPlugin.dll");
+        QObject *instance = library.instance();
+        auto *plugin = qobject_cast<Plugin *>(instance);
+        auto *provider = qobject_cast<WidgetProvider *>(instance);
+        auto *aware = qobject_cast<PluginServicesAware *>(instance);
+        QVERIFY(plugin && provider && aware);
+        aware->setPluginServices(&services);
+        struct Cleanup
+        {
+            Plugin *plugin;
+            PluginServicesAware *aware;
+            PluginServicesScope *services;
+            QPluginLoader *library;
+            ~Cleanup()
+            {
+                plugin->shutdown();
+                aware->setPluginServices(nullptr);
+                services->clear();
+                library->unload();
+            }
+        } cleanup{plugin, aware, &services, &library};
+        QVERIFY(plugin->initialize());
+        std::unique_ptr<QWidget> widget(provider->createWidget("plugin.f", nullptr));
+        QVERIFY(widget);
+        auto *status = widget->findChild<QLabel *>("contentDeviceStatus");
+        auto *button = widget->findChild<QPushButton *>("contentConnectDeviceButton");
+        auto *result = widget->findChild<QLabel *>("contentCommandResult");
+        QVERIFY(status && button && result);
+        QVERIFY(status->text().contains(QStringLiteral("设备服务不可用")));
+        button->click();
+        QVERIFY(result->text().contains(QStringLiteral("命令未处理")));
+    }
+
+    void failedPluginInitializationRemovesOnlyItsOwnCommands()
+    {
+        auto *bus = ServiceRegistry::instance()->commandBus();
+        auto hub = std::make_shared<PluginMessageHub>(bus);
+        PluginServicesScope existingService(hub);
+        QObject owner;
+        int queries = 0;
+        QVERIFY(existingService.registerCommand(DeviceProtocol::QueryStatus, &owner,
+            [&](const QVariantMap &) { ++queries; return true; }));
+        WidgetFactory factory;
+        PluginLoader loader(&factory);
+        QVERIFY(!load(loader));
+        QVERIFY(!factory.contains("device.monitor"));
+        // DevicePlugin 的第一个命令已注册，第二个冲突，失败清理不能留下第一个。
+        QVERIFY(!bus->handlerFor(DeviceProtocol::SetConnection));
+        QVERIFY(existingService.sendCommand(DeviceProtocol::QueryStatus));
+        QCOMPARE(queries, 1);
     }
 
     void cleanupTestCase()

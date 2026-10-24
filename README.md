@@ -109,7 +109,7 @@ class MyPlugin : public QObject, public Plugin, public WidgetProvider
 };
 ```
 
-`widgetClasses()` 返回该插件提供的配置名称；`createWidget` 按名称返回一个新的 QWidget 子类实例，传入 parent，失败返回 nullptr。插件只依赖这两个公共接口与 Qt，不链接主程序，也不调用 ServiceRegistry 或 WidgetFactory。插件自身的资源在 initialize 中准备，在 shutdown 中释放。
+`widgetClasses()` 返回该插件提供的配置名称；`createWidget` 按名称返回一个新的 QWidget 子类实例，传入 parent，失败返回 nullptr。插件依赖公共接口与 Qt，不链接主程序，也不调用 ServiceRegistry 或 WidgetFactory。插件自身的资源在 initialize 中准备，在 shutdown 中释放；需要跨插件通信时额外实现下面的可选 PluginServicesAware 接口。
 
 完整示例分别在 `examples/ContentPlugin`、`examples/DevicePlugin`、`examples/ReportPlugin`。它们独立编译为三个 DLL，各提供两个 QWidget 子类。主程序没有包含这些业务类的实现，也没有硬编码注册它们的名称。
 
@@ -128,6 +128,48 @@ class MyPlugin : public QObject, public Plugin, public WidgetProvider
 
 验证：构建三个内容插件后，构建 `tests/WidgetPluginSmokeTests.pro`，将同配置的 ContentPlugin.dll、DevicePlugin.dll、ReportPlugin.dll 复制到测试输出目录 `plugin-test-bin/plugins`，运行测试。测试覆盖实际 ApplicationHost 加载 DLL 内容、业务交互、插件/内置内容切换、工厂副本生命周期、销毁顺序、重复扫描及名称冲突不产生部分注册；还会读取真实的源码 main.ui，验证六面板同时加载、设备配置同步、报表编辑预览同步、窗口缩放和退出清理，生成 six-panels-preview.png 供检查。
 
+## 跨插件命令与消息演示
+
+打开程序后，左上“内容 · 计数”面板提供“发送连接命令”和“发送断开命令”。点击后，ContentPlugin 通过主程序总线发出请求，DevicePlugin 修改模拟设备状态，再发布状态消息；中上监控面板和左侧两个内容面板都会更新。
+
+直接点击设备监控面板的模拟连接按钮、或在设备设置面板应用名称和刷新间隔，也会发布状态消息。左下文本面板是第二个独立订阅者，用来演示一条消息通知多个界面。内容面板显示收到的消息序号，窗口创建时会主动请求当前状态，避免等到下一次操作才显示设备状态。
+
+两个 DLL 不包含彼此的业务类、不互相链接，也不把 ServiceRegistry 编译到插件中。它们只共享：
+
+- `PluginServices.h`：主程序提供的通信接口及可选的 PluginServicesAware 接口。
+- `DeviceProtocol.h`：设备命令、消息编号和载荷约定。
+
+| 编号 | 类型 | 载荷 |
+| --- | --- | --- |
+| 2000 | SetConnection 命令 | connected：bool |
+| 2001 | QueryStatus 命令 | 无；设备通过状态消息返回当前状态 |
+| 3000 | StatusChanged 消息 | connected：bool、name：QString、refreshInterval：int |
+
+主程序在 initialize 前调用 `setPluginServices` 注入每个插件独立的服务作用域。插件通过服务注册命令、发送命令、订阅消息和发布消息：
+
+```cpp
+// 插件声明可选能力：public PluginServicesAware
+// Q_INTERFACES(Plugin WidgetProvider PluginServicesAware)
+void setPluginServices(PluginServices *value) override { services = value; }
+
+// ContentPlugin：发送命令，bool 表示是否被成功处理。
+QVariantMap request;
+request.insert("connected", true);
+bool handled = services->sendCommand(DeviceProtocol::SetConnection, request);
+
+// 窗口订阅：this 是接收窗口，销毁时自动断开。
+services->subscribe(DeviceProtocol::StatusChanged, this,
+    [this](const QVariantMap &data) { /* 更新界面 */ });
+```
+
+`PluginMessaging` 适配现有 CommandBus：命令交给单个处理器，消息经主程序共享的中转对象交给 Qt 连接分发。每个命令或订阅必须指定一个 QObject 所有者。所有者销毁时命令自动注销、订阅自动断开；插件 shutdown 后会撤回接口并清除该插件的全部回调，再卸载插件。初始化失败、命令编号冲突时也会清理已注册的部分，已有服务不受影响。
+
+插件编号使用 2000 及以上，避免访问核心的命令 1000。空回调、同名命令、错误载荷和不存在的处理器会返回失败。消息载荷使用 QVariantMap，不向插件暴露原有 char*/void* 缓冲区。接口是同步 GUI 线程调用，不提供后台线程或跨进程通信；回调中若需要长期保存数据，请复制载荷，不要保留参数引用。
+
+原有 Plugin/1.0、WidgetProvider/1.0 接口未改变，DemoPlugin 和 ReportPlugin 不必实现通信能力。初次启用需要重新构建主程序及 ContentPlugin、DevicePlugin；后续其他插件可通过可选接口接入。若缺少设备命令处理器，ContentPlugin 会明确显示“设备服务不可用／命令未处理”；默认六分区 UI 本身仍需要三个内容插件齐全。
+
+WidgetPluginSmokeTests 额外验证双向通知、两个订阅者同时更新、动态移除订阅面板、命令/订阅自动清理、分发中销毁订阅者、自注销命令、缺失设备服务及初始化失败后的回滚，并生成 plugin-communication-preview.png。
+
 ## 接口约定
 
 - ApplicationHost：组织应用窗口与启动流程。
@@ -137,6 +179,7 @@ class MyPlugin : public QObject, public Plugin, public WidgetProvider
 - PluginLoader：扫描动态库、初始化插件，并注册可选的 WidgetProvider 内容。
 - Plugin：定义 initialize、start、stop、shutdown 四个生命周期方法；接口标识为 org.learnframework.Plugin/1.0。
 - WidgetProvider：声明 widgetClasses 和 createWidget；接口标识为 org.learnframework.WidgetProvider/1.0。
+- PluginServicesAware：可选通信能力，接口标识 org.learnframework.PluginServicesAware/1.0；PluginServices 由主程序注入。
 - ServiceRegistry：通过 instance 获取实例，提供 commandBus、registerWindow、findWindow、registerService、findService。
 - DesktopApplication：备用的 QApplication 包装，当前入口直接使用 QApplication。
 

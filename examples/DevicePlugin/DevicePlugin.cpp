@@ -1,4 +1,5 @@
 #include "DevicePlugin.h"
+#include "DeviceProtocol.h"
 
 #include <QDebug>
 #include <QFormLayout>
@@ -89,10 +90,43 @@ public:
 
 bool DevicePlugin::initialize()
 {
-    if (!state)
-        state = new DeviceState;
+    if (state)
+        return true;
+    state = new DeviceState;
+    connect(state, &DeviceState::changed, this, [this] { publishState(); });
+    if (services)
+    {
+        if (!services->registerCommand(DeviceProtocol::SetConnection, this, [this](const QVariantMap &data) {
+                if (!state || data.value("connected").type() != QVariant::Bool)
+                    return false;
+                state->connected = data.value("connected").toBool();
+                emit state->changed();
+                return true;
+            }) ||
+            !services->registerCommand(DeviceProtocol::QueryStatus, this, [this](const QVariantMap &) {
+                if (!state)
+                    return false;
+                publishState();
+                return true;
+            }))
+        {
+            qWarning() << "DevicePlugin command registration conflict";
+            return false;
+        }
+    }
     qInfo() << "DevicePlugin initialized";
     return true;
+}
+
+void DevicePlugin::publishState()
+{
+    if (!services || !state)
+        return;
+    QVariantMap data;
+    data.insert("connected", state->connected);
+    data.insert("name", state->name);
+    data.insert("refreshInterval", state->refreshInterval);
+    services->publish(DeviceProtocol::StatusChanged, data);
 }
 
 bool DevicePlugin::shutdown()

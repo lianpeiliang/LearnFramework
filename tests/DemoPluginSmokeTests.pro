@@ -6,6 +6,8 @@ TARGET = DemoPluginSmokeTests
 DESTDIR = $$PWD/../bin
 INCLUDEPATH += $$PWD/../src/foundation $$PWD/../src/runtime
 include(../src/widgets/widgets.pri)
+HEADERS += $$PWD/../src/runtime/PluginMessaging.h
+SOURCES += $$PWD/../src/runtime/PluginMessaging.cpp
 
 SOURCES += DemoPluginSmokeTests.cpp \
     ../src/runtime/ApplicationHost.cpp \

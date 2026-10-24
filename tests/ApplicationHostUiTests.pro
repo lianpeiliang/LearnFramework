@@ -7,6 +7,8 @@ TARGET = ApplicationHostUiTests
 DESTDIR = $$OUT_PWD/ui-test-bin
 INCLUDEPATH += $$PWD/../src/foundation $$PWD/../src/runtime
 include(../src/widgets/widgets.pri)
+HEADERS += $$PWD/../src/runtime/PluginMessaging.h
+SOURCES += $$PWD/../src/runtime/PluginMessaging.cpp
 SOURCES += ApplicationHostUiTests.cpp \
     ../src/runtime/ApplicationHost.cpp \
     ../src/runtime/CommandBindings.cpp \

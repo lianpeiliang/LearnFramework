@@ -25,11 +25,13 @@ SOURCES += src/runtime/DesktopApplication.cpp
 SOURCES += src/runtime/ApplicationHost.cpp
 SOURCES += src/runtime/CommandBindings.cpp
 SOURCES += src/runtime/PluginLoader.cpp
+SOURCES += src/runtime/PluginMessaging.cpp
 
 HEADERS += src/runtime/DesktopApplication.h
 HEADERS += src/runtime/ApplicationHost.h
 HEADERS += src/runtime/CommandBindings.h
 HEADERS += src/runtime/PluginLoader.h
+HEADERS += src/runtime/PluginMessaging.h
 
 # 基础接口与通用服务
 SOURCES += src/foundation/ServiceRegistry.cpp
@@ -40,3 +42,4 @@ HEADERS += src/foundation/ServiceRegistry.h
 HEADERS += src/foundation/CommandBus.h
 HEADERS += src/foundation/Plugin.h
 HEADERS += src/foundation/WidgetProvider.h
+HEADERS += src/foundation/PluginServices.h src/foundation/DeviceProtocol.h

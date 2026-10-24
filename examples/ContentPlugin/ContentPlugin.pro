@@ -5,4 +5,5 @@ TARGET = ContentPlugin
 isEmpty(DESTDIR): DESTDIR = $$PWD/../../bin/plugins
 INCLUDEPATH += $$PWD/../../src/foundation
 HEADERS += ContentPlugin.h ../../src/foundation/Plugin.h ../../src/foundation/WidgetProvider.h
+HEADERS += ../../src/foundation/PluginServices.h ../../src/foundation/DeviceProtocol.h
 SOURCES += ContentPlugin.cpp ../../src/foundation/Plugin.cpp
