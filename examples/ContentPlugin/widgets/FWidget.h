@@ -18,12 +18,12 @@ private:
     void incrementCount();
     void requestDeviceConnection(bool connected);
 
-    PluginServices *services;
+    PluginServices *services; // 借用主程序服务，发送命令时检查其是否可用。
     // 控件由 QWidget 父子关系管理，这里只保留借用指针。
     QPushButton *counterButton = nullptr;
     QPushButton *connectButton = nullptr;
     QPushButton *disconnectButton = nullptr;
     QLabel *commandResultLabel = nullptr;
     QLabel *deviceStatusLabel = nullptr;
-    int count = 0;
+    int count = 0; // 本面板独立计数，与其他 F 面板及共享设备状态无关。
 };

@@ -6,6 +6,7 @@
 #include <QString>
 #include <QWidget>
 
+// 主程序的查找入口：持有一个命令总线，并按窗口名、服务 ID 保存借用指针。
 // 注册表只记录对象，不承担窗口和共享服务的所有权。
 // 窗口/服务销毁后应避免继续查找和使用其指针，当前版本不自动移除悬空条目。
 class ServiceRegistry
@@ -36,16 +37,19 @@ public:
     bool registerService(int id, QObject *object)
     {
         // 服务 ID 是调用方约定的索引；这里不依赖任何具体服务类。
+        // 同 ID 会覆盖旧指针，不删除旧对象，也不建立 QObject 父子关系。
         services.insert(id, object);
         return true;
     }
 
     QObject *findService(int id)
     {
+        // 未注册返回 nullptr；具体服务类型由调用方在取出后检查或转换。
         return services.value(id, nullptr);
     }
 
 private:
+    // 总线随注册表存在，内部命令处理器的释放规则由 CommandBus 管理。
     CommandBus dispatcher;
     QMap<QString, QWidget *> windows;
     QMap<int, QObject *> services;

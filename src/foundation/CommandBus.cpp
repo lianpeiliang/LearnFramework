@@ -7,6 +7,7 @@ CommandBus::CommandBus()
 
 CommandBus::~CommandBus()
 {
+    // 只清理总线拥有的命令处理器；纯消息订阅者的生命周期仍由外部负责。
     clearHandlers();
 }
 
@@ -31,7 +32,8 @@ int CommandBus::registerHandler(unsigned int firstCommand, unsigned int lastComm
     {
         if (registerHandler(commandId, handler) == -1)
         {
-            // 注销本次操作已经注册的处理器
+            // 回滚前面成功的绑定；若这些是 handler 的全部引用，回滚也会销毁它。
+            // commandId 为 0 时减一会下溢，调用者需避开这一边界情形。
             unregisterHandler(firstCommand, commandId-1);
             return -1;
         }
@@ -77,6 +79,7 @@ int CommandBus::dispatchCommand(unsigned int commandId, char * data /*= 0L*/, in
 
 int CommandBus::subscribe(unsigned int messageId, CommandHandler *handler)
 {
+    // 只保存借用指针；重复插入会保留多份，调用方必须保证 handler 非空且有效。
     messageSubscribers.insert(messageId,handler);
     return 1;
 }
@@ -93,7 +96,8 @@ void CommandBus::unsubscribe(unsigned int messageId, CommandHandler *handler)
 
 int CommandBus::dispatchMessage(unsigned int messageId, void *data, int length)
 {
-    // 先取得订阅列表快照；回调期间不应销毁本轮尚未通知的其他订阅者。
+    // values() 返回本轮订阅快照，回调中增删原表不会改变这次遍历的内容。
+    // 快照只复制指针，不延长对象寿命；不能销毁本轮尚未通知的其他订阅者。
     QList<CommandHandler *> listHandler = messageSubscribers.values(messageId);
     for(int i = 0;i<listHandler.count();i++)
     {
@@ -132,7 +136,7 @@ CommandHandler * CommandBus::findHandler(unsigned int commandId)
 }
 
 
-// 增加Handler引用
+// 只统计成功的命令绑定；消息订阅和外部持有的指针均不增加计数。
 void CommandBus::retainHandler(CommandHandler * handler)
 {
     handlerReferences[handler] = referenceCount(handler) + 1;

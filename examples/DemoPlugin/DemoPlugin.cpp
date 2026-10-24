@@ -18,6 +18,7 @@ bool DemoPlugin::initialize()
         return start();
 
     clickCount = 0;
+    // 没有父窗口，因此由插件在 shutdown 中负责释放，而不是交给内容容器管理。
     window = new QWidget(nullptr, Qt::Tool);
     window->setObjectName("demoPluginWindow");
     window->setWindowTitle(QStringLiteral("示例插件"));
@@ -51,6 +52,7 @@ bool DemoPlugin::start()
 
 bool DemoPlugin::stop()
 {
+    // 暂停仅隐藏窗口，保留按钮计数，后续 start 可继续显示同一窗口。
     if (window)
         window->hide();
     return true;

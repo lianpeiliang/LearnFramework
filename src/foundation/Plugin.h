@@ -9,16 +9,16 @@ class Plugin
 public:
     virtual ~Plugin();
 
-    // 分配资源，完成初始化。
+    // 分配资源并建立服务；当前加载器在本阶段之前注入可选的 PluginServices。
     virtual bool initialize() = 0;
 
-    // 启动任务、定时器及消息订阅。
+    // 预留的运行阶段：启动任务、定时器及消息订阅；当前加载器不会自动调用。
     virtual bool start() = 0;
 
-    // 停止任务，撤销订阅，对应 start。
+    // 预留的停止阶段：撤销 start 建立的活动；当前加载器不会自动调用。
     virtual bool stop() = 0;
 
-    // 释放资源，对应 initialize。
+    // 释放资源，对应 initialize；初始化返回 false 后也会调用，需能清理部分初始化状态。
     virtual bool shutdown() = 0;
 };
 

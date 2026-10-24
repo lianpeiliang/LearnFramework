@@ -7,6 +7,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+// 每个预览先读取当前文本，再监听共享状态的后续变更。
 class ReportViewerWidget : public QWidget
 {
 public:
@@ -26,6 +27,8 @@ public:
     }
 };
 
+// 编辑框保存本窗口的草稿，点击“更新预览”才提交到共享状态。
+// 其他编辑器的草稿不会被覆盖，所有预览则会收到同一次 changed 通知。
 class ReportEditorWidget : public QWidget
 {
 public:
@@ -50,6 +53,7 @@ public:
 
 bool ReportPlugin::initialize()
 {
+    // 同一插件实例重复初始化时保留已有文本，不重新分配状态。
     if (!state)
         state = new ReportState;
     qInfo() << "ReportPlugin initialized";
@@ -66,11 +70,13 @@ bool ReportPlugin::shutdown()
 
 QStringList ReportPlugin::widgetClasses() const
 {
+    // 这些名称是主程序布局配置与控件工厂约定的键，不是 C++ 类名。
     return {QStringLiteral("report.viewer"), QStringLiteral("report.editor")};
 }
 
 QWidget *ReportPlugin::createWidget(const QString &name, QWidget *parent)
 {
+    // 同一个状态可供多个窗口使用；返回控件的所有权由 Qt 的 parent 链管理。
     if (!state)
         return nullptr;
     if (name == "report.viewer")

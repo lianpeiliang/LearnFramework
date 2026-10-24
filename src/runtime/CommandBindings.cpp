@@ -8,6 +8,7 @@ CommandBindings::CommandBindings(WidgetFactory *factory)
     auto *loader = new PluginLoader(factory);
     registered = ServiceRegistry::instance()->commandBus()->registerHandler(1000, loader) == 0;
     if (!registered)
+        // 注册被拒绝时总线没有接管引用，申请者负责释放尚未使用的加载器。
         delete loader;
 }
 

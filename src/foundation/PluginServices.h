@@ -11,12 +11,18 @@ class QObject;
 class PluginServices
 {
 public:
+    // 载荷采用 QVariantMap 约定字段，回调接收的引用仅在本次同步调用期间有效。
     using Command = std::function<bool(const QVariantMap &)>;
     using Message = std::function<void(const QVariantMap &)>;
     virtual ~PluginServices() = default;
+    // 同一时刻每个命令 ID 只能绑定一个回调；owner 销毁或服务作用域清理时自动解除注册。
+    // owner 必须与主程序消息中转对象处于同一 GUI 线程，空回调和无效参数返回 false。
     virtual bool registerCommand(unsigned int id, QObject *owner, Command command) = 0;
+    // 同步执行并返回命令回调结果；无对应命令、线程不符或编号低于 2000 也返回 false。
     virtual bool sendCommand(unsigned int id, const QVariantMap &data = {}) = 0;
+    // 一对多订阅；owner 销毁后不再调用回调，多次订阅会形成多份通知连接。
     virtual bool subscribe(unsigned int id, QObject *owner, Message callback) = 0;
+    // true 表示通过线程与编号检查并完成发布，不保证存在订阅者或业务处理成功。
     virtual bool publish(unsigned int id, const QVariantMap &data) = 0;
 };
 

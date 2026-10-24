@@ -13,6 +13,7 @@ FWidget::FWidget(PluginServices *services, QWidget *parent)
 {
     setupUi();
     connectSignals();
+    // 状态标签必须先创建；订阅与初始查询可能在此调用中立即更新标签。
     observeDevice(services, this, deviceStatusLabel);
 }
 
@@ -59,8 +60,10 @@ void FWidget::incrementCount()
 
 void FWidget::requestDeviceConnection(bool connected)
 {
+    // 只发送协议约定的目标状态，不直接访问 DevicePlugin 的实现对象。
     QVariantMap data;
     data.insert("connected", connected);
+    // 返回值表示命令是否被处理；设备的具体状态仍由订阅的广播消息刷新。
     const bool handled = services && services->sendCommand(DeviceProtocol::SetConnection, data);
     commandResultLabel->setText(handled ? QStringLiteral("命令已由 DevicePlugin 处理，状态消息已广播。")
                                        : QStringLiteral("命令未处理：设备服务不可用。"));

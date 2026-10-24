@@ -11,6 +11,7 @@
 
 ApplicationHost::ApplicationHost() : handler(&widgetFactory)
 {
+    // 内置内容与插件内容使用同一个工厂；插件注册时也会检查这些名称是否冲突。
     registerDemoWidgets(widgetFactory);
 }
 
@@ -29,6 +30,7 @@ ApplicationHost *ApplicationHost::instance()
 
 bool ApplicationHost::show()
 {
+    // 未取得命令 1000 的绑定权时，不应借用另一个宿主的加载器启动界面。
     if (!handler.isRegistered())
     {
         qCritical() << "Cannot start ApplicationHost: command 1000 is already registered";
@@ -36,10 +38,12 @@ bool ApplicationHost::show()
     }
     if (window)
     {
+        // 重复显示不会重新读取 UI；编辑外部文件后需重启程序才会应用。
         window->show();
         return true;
     }
 
+    // UI 和插件都相对可执行文件定位，启动时的当前工作目录可以任意变化。
     const QString uiPath = QDir(QCoreApplication::applicationDirPath())
                                .filePath("ui/main.ui");
     QFile file(uiPath);
@@ -61,6 +65,7 @@ bool ApplicationHost::show()
 
     // 容器构造时会复制工厂，因此必须在创建容器之前完成插件注册。
     RuntimeUiLoader loader(widgetFactory);
+    // UI 内的相对资源路径（例如图片）以 UI 文件所在目录为基准。
     loader.setWorkingDirectory(QFileInfo(file).absoluteDir());
     window.reset(loader.load(&file));
     if (!window)
@@ -69,7 +74,7 @@ bool ApplicationHost::show()
         return false;
     }
 
-    // 插件先注册类型，再按 UI 属性创建容器内容。
+    // load 完成后动态属性才齐全，此时再按 contentClass 创建各容器的内容。
     QString error;
     if (!loader.populateContainers(window.get(), &error))
     {
