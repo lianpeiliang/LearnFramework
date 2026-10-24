@@ -7,21 +7,31 @@
 
 GWidget::GWidget(PluginServices *services, QWidget *parent) : QWidget(parent)
 {
+    setupUi();
+    connectSignals();
+    observeDevice(services, this, deviceStatusLabel);
+}
+
+void GWidget::setupUi()
+{
     setObjectName("pluginGWidget");
     auto *layout = new QVBoxLayout(this);
     layout->addWidget(new QLabel(QStringLiteral("G：来自 ContentPlugin.dll"), this));
-    auto *input = new QLineEdit(this);
-    input->setObjectName("pluginTextInput");
-    input->setPlaceholderText(QStringLiteral("输入文字，体验 DLL 内的界面逻辑"));
-    auto *label = new QLabel(this);
-    label->setObjectName("pluginTextLabel");
-    layout->addWidget(input);
-    layout->addWidget(label);
+    textInput = new QLineEdit(this);
+    textInput->setObjectName("pluginTextInput");
+    textInput->setPlaceholderText(QStringLiteral("输入文字，体验 DLL 内的界面逻辑"));
+    textLabel = new QLabel(this);
+    textLabel->setObjectName("pluginTextLabel");
+    layout->addWidget(textInput);
+    layout->addWidget(textLabel);
     layout->addWidget(new QLabel(QStringLiteral("独立订阅设备状态消息"), this));
-    auto *status = new QLabel(this);
-    status->setObjectName("contentTextDeviceStatus");
-    layout->addWidget(status);
-    observeDevice(services, this, status);
+    deviceStatusLabel = new QLabel(this);
+    deviceStatusLabel->setObjectName("contentTextDeviceStatus");
+    layout->addWidget(deviceStatusLabel);
     layout->addStretch();
-    connect(input, &QLineEdit::textChanged, label, &QLabel::setText);
+}
+
+void GWidget::connectSignals()
+{
+    connect(textInput, &QLineEdit::textChanged, textLabel, &QLabel::setText);
 }
