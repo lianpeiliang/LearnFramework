@@ -26,6 +26,18 @@ Learn.pro 仍可单独构建主程序；examples/DemoPlugin/DemoPlugin.pro 可�
 
 注册表不销毁窗口和共享服务。命令处理器通过分发器的注册引用计数管理，消息订阅不持有对象。原分发器的局限留待后续分析。
 
+## 外部 UI（修改后重启生效）
+
+ApplicationHost 使用 QUiLoader 在启动时读取可执行文件旁的 `ui/main.ui`，通过 `std::unique_ptr<QWidget>` 管理窗口，不再声明 `QMainWindow window`。窗口类型、标题、尺寸及布局由 UI 文件决定；默认 UI 保留空窗口。
+
+首次修改 C++ 后需要重新构建一次（Learn.pro 已增加 `QT += uitools`，请重新运行 qmake）。构建会把源码 `ui/main.ui` 复制到 `bin/ui/main.ui`。之后用 Qt Designer 打开并保存 **`bin/ui/main.ui`**，关闭并重新启动 `bin/LearnFramework.exe` 即可看到变化，不需要编译，也不需要从 Qt Creator 启动。
+
+源码 `ui/main.ui` 是构建时部署的版本；重新构建会覆盖运行目录的 UI，如需保留设计，请同步保存到源码版本。分发程序时需要携带 `ui` 目录。加载路径不受启动工作目录影响；相对图片路径以 UI 文件所在目录为基准。UI 缺失或解析失败时记录错误并以状态码 1 退出。
+
+控件事件仍由 C++ 连接，可在加载后使用 `window->findChild<QPushButton *>("按钮的objectName")` 获取控件。修改界面不需要编译；新增业务逻辑或自定义控件仍需代码支持。此方案在重新启动时读取文件，不会自动刷新已经打开的窗口。
+
+验证工程 `tests/ApplicationHostUiTests.pro` 使用独立测试目录，检查 UI 修改后重新加载、控件文字、不同工作目录、窗口释放及缺失/损坏文件；可使用 `-platform offscreen` 运行。实现使用 Qt 官方的 [QUiLoader](https://doc.qt.io/archives/qt-5.15/quiloader.html)。
+
 ## 接口约定
 
 - ApplicationHost：组织应用窗口与启动流程。

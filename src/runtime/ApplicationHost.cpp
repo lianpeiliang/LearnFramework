@@ -3,6 +3,10 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QDebug>
+#include <QFile>
+#include <QFileInfo>
+#include <QUiLoader>
 
 ApplicationHost *ApplicationHost::instance()
 {
@@ -10,8 +14,33 @@ ApplicationHost *ApplicationHost::instance()
     return &core;
 }
 
-void ApplicationHost::show()
+bool ApplicationHost::show()
 {
+    if (window)
+    {
+        window->show();
+        return true;
+    }
+
+    const QString uiPath = QDir(QCoreApplication::applicationDirPath())
+                               .filePath("ui/main.ui");
+    QFile file(uiPath);
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        qCritical().noquote() << "Cannot open UI:" << uiPath << file.errorString();
+        return false;
+    }
+
+    QUiLoader loader;
+    // UI 中的相对图片路径以 UI 所在目录为基准。
+    loader.setWorkingDirectory(QFileInfo(file).absoluteDir());
+    window.reset(loader.load(&file));
+    if (!window)
+    {
+        qCritical().noquote() << "Cannot load UI:" << uiPath << loader.errorString();
+        return false;
+    }
+
     // 以可执行文件所在目录定位插件，避免受 Qt Creator 工作目录设置影响。
     QByteArray path = QDir(QCoreApplication::applicationDirPath())
                           .filePath("plugins")
@@ -21,8 +50,6 @@ void ApplicationHost::show()
     ServiceRegistry::instance()->commandBus()->dispatchCommand(
         1000, path.data(), path.size());
 
-    // 只显示空主窗口，框架本身不加入具体业务界面。
-    window.setWindowTitle("Framework Learning");
-    window.resize(800, 600);
-    window.show();
+    window->show();
+    return true;
 }

@@ -17,7 +17,7 @@ private slots:
         {
             // 走真实启动流程：命令绑定 → 分发 1000 → 动态加载插件。
             ApplicationHost host;
-            host.show();
+            QVERIFY(host.show());
             QApplication::processEvents();
 
             for (QWidget *widget : QApplication::topLevelWidgets())

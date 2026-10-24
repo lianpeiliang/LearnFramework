@@ -1,4 +1,4 @@
-QT += core widgets testlib
+QT += core widgets uitools testlib
 CONFIG += c++11 testcase console
 CONFIG -= app_bundle
 TEMPLATE = app

@@ -4,7 +4,7 @@ TEMPLATE = lib
 TARGET = DemoPlugin
 
 # 与主程序的 bin 目录对应，无需手动复制 DLL。
-DESTDIR = $$PWD/../../bin/plugins
+isEmpty(DESTDIR): DESTDIR = $$PWD/../../bin/plugins
 INCLUDEPATH += $$PWD/../../src/foundation
 
 HEADERS += DemoPlugin.h
