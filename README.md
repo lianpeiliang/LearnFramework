@@ -113,6 +113,13 @@ class MyPlugin : public QObject, public Plugin, public WidgetProvider
 
 完整示例分别在 `examples/ContentPlugin`、`examples/DevicePlugin`、`examples/ReportPlugin`。它们独立编译为三个 DLL，各提供两个 QWidget 子类。主程序没有包含这些业务类的实现，也没有硬编码注册它们的名称。
 
+ContentPlugin 内部按职责拆分，阅读时可以直接定位：
+
+- `ContentPlugin.h/.cpp`：插件生命周期、提供的名称及按名称创建窗口。
+- `widgets/FWidget.h/.cpp`：计数面板与设备连接命令按钮。
+- `widgets/GWidget.h/.cpp`：文本输入面板与独立的状态显示。
+- `widgets/DeviceStatusBinding.h/.cpp`：两个面板共用的状态订阅、标签更新和初始状态查询。
+
 1. 首次使用此机制时构建一次更新后的主程序。使用 Framework.pro 可同时构建默认六分区 UI 所需的全部插件。
 2. 用相同 Qt、编译器、位数和 Debug/Release 配置，单独打开各插件的 .pro 也能独立构建。默认输出到 `bin/plugins`。
 3. 在程序旁 `ui/main.ui` 中选择已注册的 contentClass，保存并重新启动程序。
