@@ -12,8 +12,6 @@ class ApplicationHost
 public:
     ApplicationHost();
     ~ApplicationHost();
-    // 备用的静态实例入口；当前 main 使用局部对象来明确控制 GUI 对象生命周期。
-    static ApplicationHost *instance();
     // 首次调用完成插件加载、外部 UI 解析和内容创建；后续调用显示已有窗口。
     // 返回 false 表示核心命令冲突、UI 无法读取/解析，或某个容器无法创建内容。
     bool show();

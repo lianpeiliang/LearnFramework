@@ -22,12 +22,6 @@ ApplicationHost::~ApplicationHost()
     widgetFactory.clear();
 }
 
-ApplicationHost *ApplicationHost::instance()
-{
-    static ApplicationHost core;
-    return &core;
-}
-
 bool ApplicationHost::show()
 {
     // 未取得命令 1000 的绑定权时，不应借用另一个宿主的加载器启动界面。
