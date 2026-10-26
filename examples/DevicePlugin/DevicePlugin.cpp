@@ -26,18 +26,22 @@ bool DevicePlugin::registerCommands()
         return true;
 
     // Lambda 只负责转交参数，具体处理逻辑放在对应的成员方法中。
+    const PluginServices::Command setConnection = [this](const QVariantMap &data) {
+        return handleSetConnection(data);
+    };
     const bool connectionRegistered = services->registerCommand(
-        DeviceProtocol::SetConnection, this,
-        [this](const QVariantMap &data) { return handleSetConnection(data); });
+        DeviceProtocol::SetConnection, this, setConnection);
     if (!connectionRegistered)
     {
         qWarning() << "DevicePlugin: failed to register SetConnection (2000)";
         return false;
     }
 
+    const PluginServices::Command queryStatus = [this](const QVariantMap &) {
+        return handleQueryStatus();
+    };
     const bool queryRegistered = services->registerCommand(
-        DeviceProtocol::QueryStatus, this,
-        [this](const QVariantMap &) { return handleQueryStatus(); });
+        DeviceProtocol::QueryStatus, this, queryStatus);
     if (!queryRegistered)
     {
         // 初始化失败后，加载器负责清理先前注册成功的命令。
