@@ -5,18 +5,7 @@
 #include "PluginServices.h"
 #include <QObject>
 
-// 两个面板共享插件内的设备状态，仅演示模拟设备，不连接真实硬件。
-class DeviceState : public QObject
-{
-    Q_OBJECT
-public:
-    QString name = QStringLiteral("示例设备");
-    int refreshInterval = 1000;
-    bool connected = false;
-
-signals:
-    void changed();
-};
+class DeviceState;
 
 // WidgetProvider 提供监控/配置控件；PluginServicesAware 接收主程序注入的通信服务。
 // 其他插件只需遵守 DeviceProtocol，无须链接本插件的业务类。

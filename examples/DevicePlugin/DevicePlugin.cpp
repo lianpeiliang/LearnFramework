@@ -1,95 +1,10 @@
 #include "DevicePlugin.h"
+#include "DeviceState.h"
 #include "DeviceProtocol.h"
+#include "widgets/DeviceMonitorWidget.h"
+#include "widgets/DeviceSettingsWidget.h"
 
 #include <QDebug>
-#include <QFormLayout>
-#include <QLabel>
-#include <QLineEdit>
-#include <QPushButton>
-#include <QSpinBox>
-#include <QVBoxLayout>
-#include <QWidget>
-
-class DeviceMonitorWidget : public QWidget
-{
-public:
-    DeviceMonitorWidget(DeviceState *state, QWidget *parent) : QWidget(parent)
-    {
-        setObjectName("deviceMonitorWidget");
-        auto *layout = new QVBoxLayout(this);
-        layout->addWidget(new QLabel(QStringLiteral("DevicePlugin.dll · 模拟设备"), this));
-        auto *name = new QLabel(this);
-        name->setObjectName("deviceNameLabel");
-        auto *status = new QLabel(this);
-        status->setObjectName("deviceStatusLabel");
-        auto *interval = new QLabel(this);
-        interval->setObjectName("deviceIntervalLabel");
-        auto *button = new QPushButton(this);
-        button->setObjectName("deviceConnectionButton");
-        layout->addWidget(name);
-        layout->addWidget(status);
-        layout->addWidget(interval);
-        layout->addWidget(button);
-        layout->addStretch();
-        // 本地面板操作与跨插件命令最终都修改同一份状态，监控界面统一在此刷新。
-        const auto update = [state, name, status, interval, button] {
-            name->setText(state->name);
-            status->setText(state->connected ? QStringLiteral("状态：已连接（模拟）")
-                                            : QStringLiteral("状态：未连接"));
-            interval->setText(QStringLiteral("刷新间隔：%1 ms（配置演示）").arg(state->refreshInterval));
-            button->setText(state->connected ? QStringLiteral("断开模拟设备")
-                                            : QStringLiteral("连接模拟设备"));
-        };
-        // 以面板为连接上下文，面板销毁后不再访问其标签和按钮。
-        connect(state, &DeviceState::changed, this, update);
-        connect(button, &QPushButton::clicked, this, [state] {
-            state->connected = !state->connected;
-            emit state->changed();
-        });
-        update();
-    }
-};
-
-class DeviceSettingsWidget : public QWidget
-{
-public:
-    DeviceSettingsWidget(DeviceState *state, QWidget *parent) : QWidget(parent)
-    {
-        setObjectName("deviceSettingsWidget");
-        auto *layout = new QVBoxLayout(this);
-        layout->addWidget(new QLabel(QStringLiteral("配置会同步到设备监控面板"), this));
-        auto *form = new QFormLayout;
-        auto *name = new QLineEdit(state->name, this);
-        name->setObjectName("deviceNameInput");
-        auto *interval = new QSpinBox(this);
-        interval->setObjectName("deviceIntervalInput");
-        interval->setRange(100, 60000);
-        interval->setSuffix(" ms");
-        interval->setValue(state->refreshInterval);
-        form->addRow(QStringLiteral("设备名称"), name);
-        form->addRow(QStringLiteral("刷新间隔"), interval);
-        layout->addLayout(form);
-        auto *apply = new QPushButton(QStringLiteral("应用配置"), this);
-        apply->setObjectName("deviceApplyButton");
-        auto *message = new QLabel(this);
-        message->setWordWrap(true);
-        layout->addWidget(apply);
-        layout->addWidget(message);
-        layout->addStretch();
-        // 输入框先保留草稿，校验通过并点击应用后才更新共享状态。
-        connect(apply, &QPushButton::clicked, this, [state, name, interval, message] {
-            if (name->text().trimmed().isEmpty())
-            {
-                message->setText(QStringLiteral("请输入设备名称。"));
-                return;
-            }
-            state->name = name->text().trimmed();
-            state->refreshInterval = interval->value();
-            emit state->changed();
-            message->setText(QStringLiteral("已应用，仅在本次运行中保留。"));
-        });
-    }
-};
 
 bool DevicePlugin::initialize()
 {

@@ -120,6 +120,15 @@ ContentPlugin 内部按职责拆分，阅读时可以直接定位：
 - `widgets/GWidget.h/.cpp`：文本输入面板与独立的状态显示。
 - `widgets/DeviceStatusBinding.h/.cpp`：两个面板共用的状态订阅、标签更新和初始状态查询。
 
+DevicePlugin 同样按职责拆分：
+
+- `DevicePlugin.h/.cpp`：插件生命周期、命令注册、状态消息发布及按名称创建窗口。
+- `DeviceState.h`：监控和设置面板共享的设备状态，以及 `changed` 通知信号；由插件拥有。
+- `widgets/DeviceMonitorWidget.h/.cpp`：设备状态显示和模拟连接切换。
+- `widgets/DeviceSettingsWidget.h/.cpp`：设备名称、刷新间隔的输入校验和应用配置。
+
+两个面板只依赖 DeviceState，不直接访问主程序通信服务；状态改变后，由插件入口统一发布跨插件消息。
+
 1. 首次使用此机制时构建一次更新后的主程序。使用 Framework.pro 可同时构建默认六分区 UI 所需的全部插件。
 2. 用相同 Qt、编译器、位数和 Debug/Release 配置，单独打开各插件的 .pro 也能独立构建。默认输出到 `bin/plugins`。
 3. 在程序旁 `ui/main.ui` 中选择已注册的 contentClass，保存并重新启动程序。
