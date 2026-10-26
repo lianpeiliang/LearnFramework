@@ -197,6 +197,5 @@ WidgetPluginSmokeTests 额外验证双向通知、两个订阅者同时更新、
 - WidgetProvider：声明 widgetClasses 和 createWidget；接口标识为 org.learnframework.WidgetProvider/1.0。
 - PluginServicesAware：可选通信能力，接口标识 org.learnframework.PluginServicesAware/1.0；PluginServices 由主程序注入。
 - ServiceRegistry：通过 instance 获取实例，提供 commandBus、registerWindow、findWindow、registerService、findService。
-- DesktopApplication：备用的 QApplication 包装，当前入口直接使用 QApplication。
 
 此次增加 WidgetProvider 是可选能力，原有 Plugin/1.0 接口未改变；使用同一 Kit 构建的旧版 DemoPlugin 可继续加载。

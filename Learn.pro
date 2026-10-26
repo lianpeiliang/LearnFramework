@@ -21,13 +21,11 @@ include(src/widgets/widgets.pri)
 
 # 程序入口与核心调度
 SOURCES += src/runtime/main.cpp
-SOURCES += src/runtime/DesktopApplication.cpp
 SOURCES += src/runtime/ApplicationHost.cpp
 SOURCES += src/runtime/CommandBindings.cpp
 SOURCES += src/runtime/PluginLoader.cpp
 SOURCES += src/runtime/PluginMessaging.cpp
 
-HEADERS += src/runtime/DesktopApplication.h
 HEADERS += src/runtime/ApplicationHost.h
 HEADERS += src/runtime/CommandBindings.h
 HEADERS += src/runtime/PluginLoader.h
