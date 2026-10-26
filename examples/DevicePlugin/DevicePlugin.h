@@ -30,5 +30,8 @@ private:
     DeviceState *state = nullptr;
     // 借用主程序的服务作用域，不由插件 delete；没有服务时仍可使用本地面板。
     PluginServices *services = nullptr;
+    bool registerCommands();
+    bool handleSetConnection(const QVariantMap &data);
+    bool handleQueryStatus();
     void publishState();
 };

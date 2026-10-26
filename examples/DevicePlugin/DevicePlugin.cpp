@@ -13,31 +13,62 @@ bool DevicePlugin::initialize()
     state = new DeviceState;
     // 把插件内部的 Qt 状态通知转换为主程序总线消息，供 ContentPlugin 等订阅。
     connect(state, &DeviceState::changed, this, [this] { publishState(); });
-    if (services)
-    {
-        // SetConnection 是带布尔载荷的控制命令；拒绝缺少字段或类型错误的请求。
-        // 命令属于当前插件服务作用域，加载器关闭插件时会统一撤销注册。
-        if (!services->registerCommand(DeviceProtocol::SetConnection, this, [this](const QVariantMap &data) {
-                if (!state || data.value("connected").type() != QVariant::Bool)
-                    return false;
-                state->connected = data.value("connected").toBool();
-                emit state->changed();
-                return true;
-            }) ||
-            // 查询不修改设备，使用同一状态消息回复，因此所有订阅者都能收到。
-            !services->registerCommand(DeviceProtocol::QueryStatus, this, [this](const QVariantMap &) {
-                if (!state)
-                    return false;
-                publishState();
-                return true;
-            }))
-        {
-            // 返回失败后，加载器仍会调用 shutdown 并清理已成功注册的部分命令。
-            qWarning() << "DevicePlugin command registration conflict";
-            return false;
-        }
-    }
+    if (!registerCommands())
+        return false;
     qInfo() << "DevicePlugin initialized";
+    return true;
+}
+
+bool DevicePlugin::registerCommands()
+{
+    // 没有通信服务时，仍允许使用本地设备面板。
+    if (!services)
+        return true;
+
+    // Lambda 只负责转交参数，具体处理逻辑放在对应的成员方法中。
+    const bool connectionRegistered = services->registerCommand(
+        DeviceProtocol::SetConnection, this,
+        [this](const QVariantMap &data) { return handleSetConnection(data); });
+    if (!connectionRegistered)
+    {
+        qWarning() << "DevicePlugin: failed to register SetConnection (2000)";
+        return false;
+    }
+
+    const bool queryRegistered = services->registerCommand(
+        DeviceProtocol::QueryStatus, this,
+        [this](const QVariantMap &) { return handleQueryStatus(); });
+    if (!queryRegistered)
+    {
+        // 初始化失败后，加载器负责清理先前注册成功的命令。
+        qWarning() << "DevicePlugin: failed to register QueryStatus (2001)";
+        return false;
+    }
+
+    return true;
+}
+
+bool DevicePlugin::handleSetConnection(const QVariantMap &data)
+{
+    if (!state)
+        return false;
+
+    const QVariant connected = data.value("connected");
+    if (connected.type() != QVariant::Bool)
+        return false;
+
+    state->connected = connected.toBool();
+    emit state->changed();
+    return true;
+}
+
+bool DevicePlugin::handleQueryStatus()
+{
+    if (!state)
+        return false;
+
+    // 查询不改变设备，通过状态消息回复所有订阅者。
+    publishState();
     return true;
 }
 
